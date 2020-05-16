@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	defaultDesiredReplicas        = 1
-	cronMetricType                = "External"
+	defaultDesiredReplicas = 1
+	cronMetricName         = "ReplicaCount"
+	cronMetricType         = "External"
 )
 
 type cronScaler struct {
@@ -36,7 +37,6 @@ type cronMetadata struct {
 	start            string
 	end              string
 	timezone         string
-	metricName       string
 	desiredReplicas  int64
 }
 
@@ -62,13 +62,6 @@ func NewCronScaler(client client.Client, deploymentName, namespace string, resol
 	endCron, ecronErr := initCron(location, meta.end)
 	if ecronErr != nil {
 		return nil, fmt.Errorf("error intializing end cron: %s", ecronErr)
-	}
-
-	startTime := startCron.Entries()[0].Next.Unix()
-	endTime   := endCron.Entries()[0].Next.Unix()
-
-	if startTime > endTime {
-		return nil, fmt.Errorf("start time cannot be greater than end time while initializing itself. %s", metadata)
 	}
 
 	return &cronScaler{
@@ -116,11 +109,6 @@ func parseCronMetadata(metadata, resolvedEnv map[string]string) (*cronMetadata, 
 	} else {
 		return nil, fmt.Errorf("No end schedule specified. %s", metadata)
 	}
-	if val, ok := metadata["metricName"]; ok && val != "" {
-		meta.metricName = val
-	} else {
-		return nil, fmt.Errorf("No metricName specified. %s", metadata)
-	}
 	if val, ok := metadata["desiredReplicas"]; ok && val != "" {
 		metadataDesiredReplicas, err := strconv.Atoi(val)
 		if err != nil {
@@ -159,7 +147,7 @@ func (s *cronScaler) GetMetricSpecForScaling() []v2beta1.MetricSpec {
     return []v2beta1.MetricSpec{
 		{
 			External: &v2beta1.ExternalMetricSource{
-				MetricName:         s.metadata.metricName,
+				MetricName:         cronMetricName,
 				TargetAverageValue: resource.NewQuantity(int64(defaultDesiredReplicas), resource.DecimalSI),
 			},
 			Type: cronMetricType,
@@ -184,7 +172,7 @@ func (s *cronScaler) GetMetrics(ctx context.Context, metricName string, metricSe
 
     /*******************************************************************************/
 	metric := external_metrics.ExternalMetricValue{
-		MetricName: metricName,
+		MetricName: cronMetricName,
 		Value:      *resource.NewQuantity(currentReplicas, resource.DecimalSI),
 		Timestamp:  metav1.Now(),
 	}
