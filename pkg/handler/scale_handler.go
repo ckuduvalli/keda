@@ -331,7 +331,7 @@ func (h *ScaleHandler) getScaler(scaledObject *kedav1alpha1.ScaledObject, trigge
 	case "prometheus":
 		return scalers.NewPrometheusScaler(resolvedEnv, triggerMetadata)
 	case "cron":
-		return scalers.NewCronScaler(h.client, scaledObject.Spec.ScaleTargetRef.DeploymentName, scaledObject.GetNamespace(), resolvedEnv, triggerMetadata)
+		return scalers.NewCronScaler(h.client, scaledObject.Spec.ScaleTargetRef.DeploymentName, scaledObject.Namespace, resolvedEnv, triggerMetadata)
 	case "redis":
 		return scalers.NewRedisScaler(resolvedEnv, triggerMetadata, authParams)
 	case "gcp-pubsub":
