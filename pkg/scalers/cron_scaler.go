@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ringtail/go-cron"
+	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/autoscaling/v2beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -75,17 +75,15 @@ func NewCronScaler(client client.Client, deploymentName, namespace string, resol
 }
 
 func initCron(location *time.Location, spec string) (*cron.Cron, error) {
-	cron := cron.NewWithLocation(location)
-	err := cron.AddFunc( spec , func() (msg string, err error) {
-		return "Cron initialized", nil
-	})
+	c := cron.New(cron.WithLocation(location))
+	_, err := c.AddFunc( spec , func() { fmt.Sprintf("Cron initialized for location ", location.String()) })
 	if err != nil {
 		return nil, err
 	}
 
-	cron.Start()
+	c.Start()
 
-	return cron, nil
+	return c, nil
 }
 
 func parseCronMetadata(metadata, resolvedEnv map[string]string) (*cronMetadata, error) {
