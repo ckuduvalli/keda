@@ -76,7 +76,7 @@ func NewCronScaler(client client.Client, deploymentName, namespace string, resol
 
 func initCron(location *time.Location, spec string) (*cron.Cron, error) {
 	c := cron.New(cron.WithLocation(location))
-	_, err := c.AddFunc( spec , func() { fmt.Sprintf("Cron initialized for location ", location.String()) })
+	_, err := c.AddFunc( spec , func() { fmt.Sprintf("Cron initialized for location %s", location.String()) })
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +114,8 @@ func parseCronMetadata(metadata, resolvedEnv map[string]string) (*cronMetadata, 
 		} else {
 			meta.desiredReplicas = int64(metadataDesiredReplicas)
 		}
+	} else {
+		return nil, fmt.Errorf("No DesiredReplicas specified. %s", metadata)
 	}
 
 	return &meta, nil
@@ -121,9 +123,9 @@ func parseCronMetadata(metadata, resolvedEnv map[string]string) (*cronMetadata, 
 
 // IsActive checks if the startTime or endTime has reached
 func (s *cronScaler) IsActive(ctx context.Context) (bool, error) {
-    var currentTime = time.Now().Unix()
-    startTime := s.startCron.Entries()[0].Next.Unix()
+	startTime := s.startCron.Entries()[0].Next.Unix()
 	endTime := s.endCron.Entries()[0].Next.Unix()
+	currentTime := time.Now().Unix()
 
     if startTime < endTime && currentTime < startTime {
     	return false, nil
