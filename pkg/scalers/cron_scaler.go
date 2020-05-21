@@ -7,14 +7,11 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/autoscaling/v2beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/metrics/pkg/apis/external_metrics"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -26,11 +23,8 @@ const (
 
 type cronScaler struct {
 	metadata               *cronMetadata
-	deploymentName         string
-	namespace              string
 	startCron              *cron.Cron
 	endCron                *cron.Cron
-	client                 client.Client
 }
 
 type cronMetadata struct {
@@ -43,47 +37,30 @@ type cronMetadata struct {
 var cronLog = logf.Log.WithName("cron_scaler")
 
 // NewCronScaler creates a new cronScaler
-func NewCronScaler(client client.Client, deploymentName, namespace string, resolvedEnv, metadata map[string]string) (Scaler, error) {
+func NewCronScaler(resolvedEnv, metadata map[string]string) (Scaler, error) {
 	meta, parseErr := parseCronMetadata(metadata, resolvedEnv)
 	if parseErr != nil {
 		return nil, fmt.Errorf("error parsing cron metadata: %s", parseErr)
 	}
 
-	location, err := time.LoadLocation(meta.timezone)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to load timezone. Error: %s", err)
-	}
-
-	startCron, scronErr := initCron(location, meta.start)
-	if scronErr != nil {
-		return nil, fmt.Errorf("error initializing start cron: %s", scronErr)
-	}
-
-	endCron, ecronErr := initCron(location, meta.end)
-	if ecronErr != nil {
-		return nil, fmt.Errorf("error intializing end cron: %s", ecronErr)
-	}
-
 	return &cronScaler{
 		metadata               : meta,
-		deploymentName         : deploymentName,
-		namespace              : namespace,
-		startCron              : startCron,
-		endCron                : endCron,
-		client                 : client,
 	}, nil
 }
 
-func initCron(location *time.Location, spec string) (*cron.Cron, error) {
+func getCronTime(location *time.Location, spec string) (int64, error) {
 	c := cron.New(cron.WithLocation(location))
 	_, err := c.AddFunc( spec , func() { fmt.Sprintf("Cron initialized for location %s", location.String()) })
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	c.Start()
+	cronTime := c.Entries()[0].Next.Unix()
+	c.Stop()
 
-	return c, nil
+	return cronTime, nil
+
 }
 
 func parseCronMetadata(metadata, resolvedEnv map[string]string) (*cronMetadata, error) {
@@ -123,22 +100,35 @@ func parseCronMetadata(metadata, resolvedEnv map[string]string) (*cronMetadata, 
 
 // IsActive checks if the startTime or endTime has reached
 func (s *cronScaler) IsActive(ctx context.Context) (bool, error) {
-	startTime := s.startCron.Entries()[0].Next.Unix()
-	endTime := s.endCron.Entries()[0].Next.Unix()
-	currentTime := time.Now().Unix()
+	location, err := time.LoadLocation(s.metadata.timezone)
+	if err != nil {
+		return false, fmt.Errorf("Unable to load timezone. Error: %s", err)
+	}
 
+	startTime, scronErr := getCronTime(location, s.metadata.start)
+	if scronErr != nil {
+		return false, fmt.Errorf("error initializing start cron: %s", scronErr)
+	}
+
+	endTime, ecronErr := getCronTime(location, s.metadata.end)
+	if ecronErr != nil {
+		return false, fmt.Errorf("error intializing end cron: %s", ecronErr)
+	}
+
+	currentTime := time.Now().Unix()
     if startTime < endTime && currentTime < startTime {
+    	cronLog.V(0).Info("1st case CK SCALER INACTIVE")
     	return false, nil
     } else if currentTime <= endTime {
+		cronLog.V(0).Info("CK SCALER ACTIVE")
     	return true, nil
 	} else {
+		cronLog.V(0).Info("3rd CASE CK SCALER INACTIVE")
 		return false, nil
     }
 }
 
 func (s *cronScaler) Close() error {
-	s.startCron.Stop()
-	s.endCron.Stop()
 	return nil
 }
 
@@ -157,12 +147,6 @@ func (s *cronScaler) GetMetricSpecForScaling() []v2beta1.MetricSpec {
 
 // GetMetrics finds the current value of the metric
 func (s *cronScaler) GetMetrics(ctx context.Context, metricName string, metricSelector labels.Selector) ([]external_metrics.ExternalMetricValue, error) {
-
-	deployment := &appsv1.Deployment{}
-	err := s.client.Get(context.TODO(), types.NamespacedName{Name: s.deploymentName, Namespace: s.namespace}, deployment)
-	if err != nil {
-		return []external_metrics.ExternalMetricValue{}, fmt.Errorf("error inspecting deployment: %s", err)
-	}
 
 	var currentReplicas = int64(defaultDesiredReplicas)
 	isActive, _ := s.IsActive(ctx)
