@@ -23,8 +23,6 @@ const (
 
 type cronScaler struct {
 	metadata               *cronMetadata
-	startCron              *cron.Cron
-	endCron                *cron.Cron
 }
 
 type cronMetadata struct {
