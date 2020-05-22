@@ -129,11 +129,12 @@ func (s *cronScaler) Close() error {
 
 // GetMetricSpecForScaling returns the metric spec for the HPA
 func (s *cronScaler) GetMetricSpecForScaling() []v2beta1.MetricSpec {
+	specReplicas := 1
     return []v2beta1.MetricSpec{
 		{
 			External: &v2beta1.ExternalMetricSource{
 				MetricName:         cronMetricName,
-				TargetAverageValue: resource.NewQuantity(int64(defaultDesiredReplicas), resource.DecimalSI),
+				TargetAverageValue: resource.NewQuantity(int64(specReplicas), resource.DecimalSI),
 			},
 			Type: cronMetricType,
 		},
