@@ -115,13 +115,10 @@ func (s *cronScaler) IsActive(ctx context.Context) (bool, error) {
 
 	currentTime := time.Now().Unix()
     if startTime < endTime && currentTime < startTime {
-    	cronLog.V(0).Info("1st case CK SCALER INACTIVE")
     	return false, nil
     } else if currentTime <= endTime {
-		cronLog.V(0).Info("CK SCALER ACTIVE")
     	return true, nil
 	} else {
-		cronLog.V(0).Info("3rd CASE CK SCALER INACTIVE")
 		return false, nil
     }
 }
