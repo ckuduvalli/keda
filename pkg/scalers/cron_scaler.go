@@ -145,7 +145,11 @@ func (s *cronScaler) GetMetricSpecForScaling() []v2beta1.MetricSpec {
 func (s *cronScaler) GetMetrics(ctx context.Context, metricName string, metricSelector labels.Selector) ([]external_metrics.ExternalMetricValue, error) {
 
 	var currentReplicas = int64(defaultDesiredReplicas)
-	isActive, _ := s.IsActive(ctx)
+	isActive, err := s.IsActive(ctx)
+	if err != nil {
+		cronLog.Error(err, "error")
+		return []external_metrics.ExternalMetricValue{}, err
+	}
 	if isActive {
 		currentReplicas = s.metadata.desiredReplicas
 	}
